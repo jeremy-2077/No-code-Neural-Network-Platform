@@ -1,0 +1,16 @@
+neural_network_platform/
+├── main.py
+├── database/
+│   └── db_manager.py
+├── models/
+│   ├── neural_network.py
+│   └── data_processor.py
+├── ui/
+│   ├── main_window.py
+│   ├── data_analysis_page.py
+│   ├── model_builder_page.py
+│   ├── training_page.py
+│   └── inference_page.py
+└── utils/
+    ├── visualizer.py
+    └── model_parser.py 
