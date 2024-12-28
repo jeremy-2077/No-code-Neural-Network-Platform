@@ -1,7 +1,8 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                             QLabel, QGroupBox, QFormLayout, QSpinBox, QComboBox,
                             QProgressBar, QCheckBox, QDoubleSpinBox, QMessageBox,
-                            QFileDialog, QDialog, QListWidget, QListWidgetItem)
+                            QFileDialog, QDialog, QListWidget, QListWidgetItem,
+                            QScrollArea, QButtonGroup, QRadioButton)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -133,39 +134,40 @@ class ModelSelectDialog(QDialog):
         
         layout = QVBoxLayout()
         
+        # 添加说明标签
+        info_label = QLabel("选择要加载的模型:")
+        layout.addWidget(info_label)
+        
         # 模型列表
         self.list_widget = QListWidget()
-        for model_id, name, created_at in models:
-            try:
-                # 将日期时间字符串转换为 datetime 对象
-                if created_at:
-                    created_time = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
-                    # 将 datetime 对象格式化为字符串，以便显示
-                    created_time_str = created_time.strftime('%Y-%m-%d %H:%M:%S')
-                else:
-                    created_time_str = "未知时间"
-            except (ValueError, TypeError):
-                created_time_str = "未知时间"
-
-            # 创建 QListWidgetItem 并设置其文本和数据
-            item = QListWidgetItem(f"{name} (创建时间: {created_time_str})")
-            item.setData(Qt.UserRole, model_id)  # 将模型ID设置为用户数据，以便后续使用
-            self.list_widget.addItem(item)  # 将项添加到列表中
-        
-        # 按钮
-        button_layout = QHBoxLayout()
-        ok_btn = QPushButton("确定")
-        cancel_btn = QPushButton("取消")
-        
-        ok_btn.clicked.connect(self.accept)
-        cancel_btn.clicked.connect(self.reject)
-        
-        button_layout.addWidget(ok_btn)
-        button_layout.addWidget(cancel_btn)
+        if not models:  # 如果没有模型
+            item = QListWidgetItem("没有可用的模型")
+            item.setFlags(item.flags() & ~Qt.ItemIsEnabled)  # 禁用该项
+            self.list_widget.addItem(item)
+        else:
+            for model in models:
+                # 创建显示文本
+                display_text = f"模型名称: {model['name']}\n创建时间: {model['created_at']}"
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.UserRole, model['id'])  # 存储模型ID
+                self.list_widget.addItem(item)
         
         layout.addWidget(self.list_widget)
-        layout.addLayout(button_layout)
         
+        # 按钮布局
+        button_layout = QHBoxLayout()
+        
+        load_btn = QPushButton("加载")
+        load_btn.clicked.connect(self.accept)
+        load_btn.setEnabled(bool(models))  # 如果没有模型则禁用按钮
+        
+        cancel_btn = QPushButton("取消")
+        cancel_btn.clicked.connect(self.reject)
+        
+        button_layout.addWidget(load_btn)
+        button_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(button_layout)
         self.setLayout(layout)
     
     def get_selected_model_id(self):
@@ -182,6 +184,9 @@ class TrainingPage(QWidget):
         self.training_thread = None
         self.visualizer = DataVisualizer()
         self.data = None
+        self.df = None
+        self.feature_checkboxes = {}  # 存储特征复选框
+        self.label_radios = {}  # 存储标签单选按钮
         self.setup_ui()
     
     def setup_ui(self):
@@ -215,6 +220,46 @@ class TrainingPage(QWidget):
         data_layout.addWidget(self.load_data_btn)
         data_layout.addWidget(self.data_info_label)
         data_group.setLayout(data_layout)
+        
+        # 添加特征选择组
+        feature_group = QGroupBox("特征选择")
+        feature_layout = QVBoxLayout()
+        
+        # 创建滚动区域用于特征选择
+        feature_scroll = QScrollArea()
+        feature_scroll.setWidgetResizable(True)
+        feature_widget = QWidget()
+        # 将布局保存为实例变量
+        self.feature_checkbox_layout = QVBoxLayout()
+        
+        # 标签选择区域
+        label_scroll = QScrollArea()
+        label_scroll.setWidgetResizable(True)
+        label_widget = QWidget()
+        # 将布局保存为实例变量
+        self.label_radio_layout = QVBoxLayout()
+        
+        # 添加标签
+        feature_layout.addWidget(QLabel("选择特征列:"))
+        feature_layout.addWidget(feature_scroll)
+        feature_layout.addWidget(QLabel("选择标签列:"))
+        feature_layout.addWidget(label_scroll)
+        
+        # 存储复选框和单选按钮的字典
+        self.feature_checkboxes = {}
+        self.label_radios = {}
+        
+        feature_widget.setLayout(self.feature_checkbox_layout)
+        feature_scroll.setWidget(feature_widget)
+        label_widget.setLayout(self.label_radio_layout)
+        label_scroll.setWidget(label_widget)
+        
+        # 确认选择按钮
+        self.confirm_features_btn = QPushButton("确认选择")
+        self.confirm_features_btn.clicked.connect(self.confirm_feature_selection)
+        feature_layout.addWidget(self.confirm_features_btn)
+        
+        feature_group.setLayout(feature_layout)
         
         # 超参数设置组
         hyperparams_group = QGroupBox("超参数设置")
@@ -289,6 +334,7 @@ class TrainingPage(QWidget):
         
         left_panel.addWidget(model_group)  # 添加到左侧面板最上方
         left_panel.addWidget(data_group)
+        left_panel.addWidget(feature_group)
         left_panel.addWidget(hyperparams_group)
         left_panel.addWidget(training_group)
         left_panel.addWidget(control_group)
@@ -313,11 +359,16 @@ class TrainingPage(QWidget):
     def load_model(self):
         """加载已保存的模型"""
         try:
-            # 获取所有模型
-            models = self.model.db.get_all_models() if self.model else NNModel().db.get_all_models()
+            if self.user_id is None:
+                QMessageBox.warning(self, "警告", "请先登录！")
+                return
+            
+            # 获取当前用户的所有模型
+            model = NNModel()
+            models = model.get_user_models(self.user_id)
             
             if not models:
-                QMessageBox.warning(self, "警告", "没有找到已保存的模型！")
+                QMessageBox.warning(self, "提示", "您还没有保存过任何模型！")
                 return
             
             # 显示模型选择对话框
@@ -325,9 +376,13 @@ class TrainingPage(QWidget):
             if dialog.exec_() == QDialog.Accepted:
                 model_id = dialog.get_selected_model_id()
                 if model_id:
-                    model = NNModel.load(model_id)
-                    self.set_model(model)
-                    QMessageBox.information(self, "成功", "模型加载成功！")
+                    try:
+                        # 加载模型时传入用户ID进行验证
+                        model = NNModel.load(model_id=model_id, user_id=self.user_id)
+                        self.set_model(model)
+                        QMessageBox.information(self, "成功", "模型加载成功！")
+                    except Exception as e:
+                        QMessageBox.critical(self, "错误", f"加载模型失败: {str(e)}")
                 else:
                     QMessageBox.warning(self, "警告", "请选择一个模型！")
                     
@@ -348,13 +403,13 @@ class TrainingPage(QWidget):
     def show_model_info(self):
         """显示模型信息"""
         if self.model:
-            info = "当前模型结构:\n"
+            info = "当前型结构:\n"
             for i, layer in enumerate(self.model.layers):
                 info += f"Layer {i+1}: {layer.type} - {layer.params}\n"
             QMessageBox.information(self, "模型信息", info)
     
     def load_training_data(self):
-        """加载训���数据"""
+        """加载训练数据"""
         try:
             file_path, _ = QFileDialog.getOpenFileName(
                 self, "选择训练数据", "", "CSV Files (*.csv);;Excel Files (*.xlsx *.xls)"
@@ -362,56 +417,114 @@ class TrainingPage(QWidget):
             if file_path:
                 # 加载数据
                 if file_path.endswith('.csv'):
-                    df = pd.read_csv(file_path)
+                    self.df = pd.read_csv(file_path)
                 else:
-                    df = pd.read_excel(file_path)
+                    self.df = pd.read_excel(file_path)
                 
-                # 假设最后一列是标签
-                X = df.iloc[:, :-1].values
-                y = df.iloc[:, -1].values
+                # 清空现有的复选框和单选按钮
+                for checkbox in self.feature_checkboxes.values():
+                    checkbox.deleteLater()
+                for radio in self.label_radios.values():
+                    radio.deleteLater()
+                self.feature_checkboxes.clear()
+                self.label_radios.clear()
                 
-                # 划分训练集和验证集
-                from sklearn.model_selection import train_test_split
-                X_train, X_val, y_train, y_val = train_test_split(
-                    X, y, test_size=0.2, random_state=42
-                )
-                
-                # 创建数据加载器
-                from torch.utils.data import TensorDataset, DataLoader
-                train_dataset = TensorDataset(
-                    torch.FloatTensor(X_train),
-                    torch.LongTensor(y_train)
-                )
-                val_dataset = TensorDataset(
-                    torch.FloatTensor(X_val),
-                    torch.LongTensor(y_val)
-                )
-                
-                self.data = {
-                    "train_loader": DataLoader(
-                        train_dataset,
-                        batch_size=self.batch_size_spin.value(),
-                        shuffle=True
-                    ),
-                    "val_loader": DataLoader(
-                        val_dataset,
-                        batch_size=self.batch_size_spin.value(),
-                        shuffle=False
-                    )
-                }
+                # 创建特征复选框组
+                button_group = QButtonGroup()
+                for column in self.df.columns:
+                    # 添加特征复选框
+                    checkbox = QCheckBox(column)
+                    checkbox.setChecked(False)  # 默认不选中
+                    self.feature_checkboxes[column] = checkbox
+                    self.feature_checkbox_layout.addWidget(checkbox)
+                    
+                    # 添加标签单选按钮
+                    radio = QRadioButton(column)
+                    self.label_radios[column] = radio
+                    self.label_radio_layout.addWidget(radio)
+                    button_group.addButton(radio)
                 
                 # 更新数据信息
                 self.data_info_label.setText(
                     f"已加载数据:\n"
-                    f"训练集: {len(X_train)} 样本\n"
-                    f"验证集: {len(X_val)} 样本\n"
-                    f"特征数: {X.shape[1]}"
+                    f"总样本数: {len(self.df)}\n"
+                    f"特征数: {len(self.df.columns)}"
                 )
                 
-                QMessageBox.information(self, "成功", "数据加载成功！")
+                QMessageBox.information(self, "成功", "数据加载成功！请选择特征列和标签列")
                 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载数据失败: {str(e)}")
+    
+    def confirm_feature_selection(self):
+        """确认特征选择"""
+        try:
+            # 获取选中的特征列
+            selected_features = [col for col, checkbox in self.feature_checkboxes.items() 
+                               if checkbox.isChecked()]
+            
+            # 获取选中的标签列
+            selected_label = None
+            for col, radio in self.label_radios.items():
+                if radio.isChecked():
+                    selected_label = col
+                    break
+            
+            if not selected_features:
+                QMessageBox.warning(self, "警告", "请至少选择一个特征列！")
+                return
+            
+            if not selected_label:
+                QMessageBox.warning(self, "警告", "请选择一个标签列！")
+                return
+            
+            # 准备数据
+            X = self.df[selected_features].values
+            y = self.df[selected_label].values
+            
+            # 划分训练集和验证集
+            from sklearn.model_selection import train_test_split
+            X_train, X_val, y_train, y_val = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+            
+            # 创建数据加载器
+            from torch.utils.data import TensorDataset, DataLoader
+            train_dataset = TensorDataset(
+                torch.FloatTensor(X_train),
+                torch.LongTensor(y_train)
+            )
+            val_dataset = TensorDataset(
+                torch.FloatTensor(X_val),
+                torch.LongTensor(y_val)
+            )
+            
+            self.data = {
+                "train_loader": DataLoader(
+                    train_dataset,
+                    batch_size=self.batch_size_spin.value(),
+                    shuffle=True
+                ),
+                "val_loader": DataLoader(
+                    val_dataset,
+                    batch_size=self.batch_size_spin.value(),
+                    shuffle=False
+                )
+            }
+            
+            # 更新数据信息
+            self.data_info_label.setText(
+                f"已选择数:\n"
+                f"特征列: {', '.join(selected_features)}\n"
+                f"标签列: {selected_label}\n"
+                f"训练集: {len(X_train)} 样本\n"
+                f"验证集: {len(X_val)} 样本"
+            )
+            
+            QMessageBox.information(self, "成功", "特征选择完成！可以开始训练")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"特征选择失败: {str(e)}")
     
     def start_training(self):
         """开始训练"""
@@ -420,7 +533,7 @@ class TrainingPage(QWidget):
             return
         
         if self.data is None:
-            QMessageBox.warning(self, "警告", "请先加载训练数据！")
+            QMessageBox.warning(self, "警告", "请先加载训练数据")
             return
         
         # 获取训练参数
@@ -490,7 +603,7 @@ class TrainingPage(QWidget):
         ax2 = self.figure.add_subplot(212)
         ax2.plot(history["accuracy"], label="训练准确率")
         ax2.plot(history["val_accuracy"], label="验证准确率")
-        ax2.set_title("准���率曲线")
+        ax2.set_title("准确率曲线")
         ax2.set_xlabel("Epoch")
         ax2.set_ylabel("Accuracy (%)")
         ax2.legend()
@@ -505,7 +618,7 @@ class TrainingPage(QWidget):
             return
         
         try:
-            # 选择保存路径
+            # 选择保存���径
             file_path, _ = QFileDialog.getSaveFileName(
                 self, "保存模型", "", "模型文件 (*.pt);;所有文件 (*)"
             )

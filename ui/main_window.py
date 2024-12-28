@@ -1,8 +1,11 @@
 from PyQt5.QtWidgets import (QMainWindow, QTabWidget, QWidget, QVBoxLayout,
-                           QMenuBar, QAction, QTableWidget, QTableWidgetItem,
-                           QDialog, QTextEdit, QHBoxLayout, QPushButton, QFileDialog,
-                           QMessageBox)
+                             QMenuBar, QAction, QTableWidget, QTableWidgetItem,
+                             QDialog, QTextEdit, QHBoxLayout, QPushButton, QFileDialog,
+                             QMessageBox, QLabel, QStackedWidget)
+
+from database.db_manager import DatabaseManager
 from .data_analysis_page import DataAnalysisPage
+from .login_page import LoginPage
 from .model_builder_page import ModelBuilderPage
 from .training_page import TrainingPage
 from .inference_page import InferencePage
@@ -26,7 +29,7 @@ class GeneratedModelsDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "ID", "任务类型", "数据规模", "复杂度", 
+            "ID", "任务类型", "数据规模", "复杂度",
             "时间预算", "特殊需求", "创建时间"
         ])
         layout.addWidget(self.table)
@@ -154,29 +157,122 @@ class MainWindow(QMainWindow):
         self.create_menu_bar()
 
     def init_ui(self):
-        # 创建中心部件和布局
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        # 创建堆叠窗口部件
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
 
-        # 创建标签页组件
-        self.tab_widget = QTabWidget()
-        layout.addWidget(self.tab_widget)
+        # 创建登录页面
+        self.login_page = LoginPage()
+        self.login_page.login_success.connect(self.on_login_success)
 
-        # 添加四个主要页面
-        self.data_analysis_page = DataAnalysisPage()
-        self.model_builder_page = ModelBuilderPage()
-        self.training_page = TrainingPage()
-        self.inference_page = InferencePage()
+        # 添加登录页面到堆叠窗口部件
+        self.stacked_widget.addWidget(self.login_page)
+
+        # 创建主内容页面
+        self.main_content = QTabWidget()
+
+        # 创建包含标签页和登出按钮的容器
+        self.main_container = QWidget()
+        main_layout = QVBoxLayout()
+
+        # 创建顶部工具栏
+        toolbar = QWidget()
+        toolbar_layout = QHBoxLayout()
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 添加用户信息标签
+        self.user_label = QLabel()
+        toolbar_layout.addWidget(self.user_label)
+
+        toolbar_layout.addStretch()  # 添加弹性空间
+
+        # 创建登出按钮
+        self.logout_btn = QPushButton("登出")
+        self.logout_btn.clicked.connect(self.logout)
+
+        toolbar_layout.addWidget(self.logout_btn)
+
+        toolbar.setLayout(toolbar_layout)
+
+        # 将工具栏和标签页添加到主容器
+        main_layout.addWidget(toolbar)
+        main_layout.addWidget(self.main_content)
+        self.main_container.setLayout(main_layout)
+
+        # 添加主容器到堆叠窗口部件
+        self.stacked_widget.addWidget(self.main_container)
+
+        # 初始化主要页面（但不立即创建实例）
+        self.data_analysis_page = None
+        self.model_builder_page = None
+        self.training_page = None
+        self.inference_page = None
+        self.ai_assistant = None
+
+        # 显示登录页面
+        self.stacked_widget.setCurrentWidget(self.login_page)
+
+    def on_login_success(self, user_id):
+        """登录成功后的处理"""
+        # 创建主要页面实例
+        if not self.data_analysis_page:
+            self.data_analysis_page = DataAnalysisPage()
+            self.model_builder_page = ModelBuilderPage()
+            self.training_page = TrainingPage()
+            self.inference_page = InferencePage()
+            # 添加AI助手标签页作为辅助功能
+            self.ai_assistant = AIAssistantWidget()
+
+            # 设置用户ID
+            self.data_analysis_page.user_id = user_id
+            self.model_builder_page.user_id = user_id
+            self.training_page.user_id = user_id
+            self.inference_page.user_id = user_id
+            self.ai_assistant.user_id = user_id
+
+            # 添加页面到标签栏
+            self.main_content.addTab(self.data_analysis_page, "数据分析")
+            self.main_content.addTab(self.model_builder_page, "模型搭建")
+            self.main_content.addTab(self.training_page, "模型训练")
+            self.main_content.addTab(self.inference_page, "模型应用")
+            self.main_content.addTab(self.ai_assistant, "AI助手")
+        else:
+            # 更新各页面的用户ID
+            self.data_analysis_page.user_id = user_id
+            self.model_builder_page.user_id = user_id
+            self.training_page.user_id = user_id
+            self.inference_page.user_id = user_id
+            self.ai_assistant.user_id = user_id
+
+        # 更新用户信息显示
+        self.update_user_info(user_id)
+
+        # 切换到主内容页面
+        self.stacked_widget.setCurrentWidget(self.main_container)
         
-        self.tab_widget.addTab(self.data_analysis_page, "数据分析")
-        self.tab_widget.addTab(self.model_builder_page, "模型搭建")
-        self.tab_widget.addTab(self.training_page, "模型训练")
-        self.tab_widget.addTab(self.inference_page, "模型应用")
+        # 设置默认显示数据分析标签页
+        self.main_content.setCurrentIndex(0)
 
-        # 添加AI助手标签页作为辅助功能
-        self.ai_assistant = AIAssistantWidget()
-        self.tab_widget.addTab(self.ai_assistant, "AI助手")
+    def update_user_info(self, user_id):
+        """更新用户信息显示"""
+        # 从数据库获取用户名
+        with DatabaseManager().get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+            result = cursor.fetchone()
+            if result:
+                self.user_label.setText(f"当前用户：{result[0]}")
+
+    def logout(self):
+        """登出处理"""
+        # 清空登录表单
+        self.login_page.username_input.clear()
+        self.login_page.password_input.clear()
+
+        # 切换回登录页面
+        self.stacked_widget.setCurrentWidget(self.login_page)
+
+
 
     def create_menu_bar(self):
         menubar = self.menuBar()

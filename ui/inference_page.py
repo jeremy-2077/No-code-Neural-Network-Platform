@@ -59,7 +59,23 @@ class InferencePage(QWidget):
         input_layout.addWidget(QLabel("或手动输入:"))
         input_layout.addWidget(self.manual_input)
         input_group.setLayout(input_layout)
-        
+
+        # 数据选择组
+        column_select_group = QGroupBox("数据列选择")
+        column_select_layout = QVBoxLayout()
+
+        self.column_list_widget = QTableWidget()
+        self.column_list_widget.setColumnCount(1)
+        self.column_list_widget.setHorizontalHeaderLabels(["列名"])
+        self.column_list_widget.setSelectionMode(QTableWidget.MultiSelection)
+
+        apply_columns_btn = QPushButton("应用选择")
+        apply_columns_btn.clicked.connect(self.apply_selected_columns)
+
+        column_select_layout.addWidget(self.column_list_widget)
+        column_select_layout.addWidget(apply_columns_btn)
+        column_select_group.setLayout(column_select_layout)
+
         # 预测控制组
         predict_group = QGroupBox("预测控制")
         predict_layout = QVBoxLayout()
@@ -73,6 +89,7 @@ class InferencePage(QWidget):
         
         left_panel.addWidget(model_group)
         left_panel.addWidget(input_group)
+        left_panel.addWidget(column_select_group)
         left_panel.addWidget(predict_group)
         left_panel.addStretch()
         
@@ -123,7 +140,7 @@ class InferencePage(QWidget):
                 QMessageBox.information(self, "成功", "模型加载成功！")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载模型失败: {str(e)}")
-    
+
     def load_input_data(self):
         """加载输入数据文件"""
         try:
@@ -135,19 +152,68 @@ class InferencePage(QWidget):
                     self.input_data = pd.read_csv(file_path)
                 else:
                     self.input_data = pd.read_excel(file_path)
+
                 self.update_input_preview()
+                self.update_column_list()
                 QMessageBox.information(self, "成功", "数据加载成功！")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载数据失败: {str(e)}")
-    
+
+    def update_column_list(self):
+        """更新数据列选择列表"""
+        if self.input_data is not None:
+            self.column_list_widget.setRowCount(len(self.input_data.columns))
+            for i, column_name in enumerate(self.input_data.columns):
+                item = QTableWidgetItem(column_name)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Unchecked)
+                self.column_list_widget.setItem(i, 0, item)
+
+    def apply_selected_columns(self):
+        """应用选择的列"""
+        if self.input_data is None:
+            QMessageBox.warning(self, "警告", "请先导入数据！")
+            return
+
+        selected_columns = []
+        for row in range(self.column_list_widget.rowCount()):
+            item = self.column_list_widget.item(row, 0)
+            if item.checkState() == Qt.Checked:
+                selected_columns.append(item.text())
+
+        if not selected_columns:
+            QMessageBox.warning(self, "警告", "请选择至少一个列！")
+            return
+
+        try:
+            # 将选中的列保存到 selected_data，不修改 input_data
+            self.selected_data = self.input_data[selected_columns]
+
+            # 更新 input_data 的内容为 selected_data
+            self.input_data = self.selected_data
+
+            QMessageBox.information(self, "成功", "列选择已应用！")
+        except KeyError as e:
+            QMessageBox.critical(self, "错误", f"列选择失败: {str(e)}")
+
     def update_input_preview(self):
         """更新输入数据预览"""
         if self.input_data is not None:
+            # 清空表格
+            self.result_table.setRowCount(0)
+            self.result_table.setColumnCount(len(self.input_data.columns))
+
+            # 设置列名
+            for i, column_name in enumerate(self.input_data.columns):
+                self.result_table.setHorizontalHeaderItem(i, QTableWidgetItem(column_name))
+
+            # 设置行数据
             self.result_table.setRowCount(len(self.input_data))
             for i in range(len(self.input_data)):
-                item = QTableWidgetItem(str(self.input_data.iloc[i].values))
-                self.result_table.setItem(i, 0, item)
-    
+                for j in range(len(self.input_data.columns)):
+                    item = QTableWidgetItem(str(self.input_data.iloc[i, j]))
+                    self.result_table.setItem(i, j, item)
+
     def on_task_changed(self, task_type: str):
         """任务类型改变时的处理"""
         if task_type == "分类":

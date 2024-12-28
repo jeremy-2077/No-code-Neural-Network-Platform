@@ -43,6 +43,7 @@ class ModelBuilderPage(QWidget):
         self.selected_layer = None
         self.drawing_connection = False
         self.connection_start = None
+        self.user_id = None  # 添加用户ID属性
         self.setup_ui()
     
     def setup_ui(self):
@@ -330,6 +331,10 @@ class ModelBuilderPage(QWidget):
 
     def save_model(self):
         """保存模型结构"""
+        if self.user_id is None:
+            QMessageBox.warning(self, "警告", "请先登录！")
+            return
+
         # 弹出输入对话框，获取用户输入的文件名
         file_name, ok = QInputDialog.getText(self, "保存模型", "请输入模型文件名:", QLineEdit.Normal, "")
 
@@ -352,8 +357,7 @@ class ModelBuilderPage(QWidget):
                     elif layer.layer_type == "池化层":
                         nn_layer = NNLayer("MaxPool2d" if layer.params["mode"] == "max" else "AvgPool2d", {
                             "kernel_size": layer.params["kernel_size"],
-                            "stride": layer.params["stride"],
-                            "padding": layer.params["padding"]
+                            "stride": layer.params["stride"]
                         })
                     elif layer.layer_type == "全连接层":
                         nn_layer = NNLayer("Linear", {
@@ -366,8 +370,8 @@ class ModelBuilderPage(QWidget):
                     # 添加层到模型
                     model.add_layer(nn_layer)
                 
-                # 保存模型
-                model.save(file_name)
+                # 保存模型，传入用户ID
+                model.save(name=file_name, user_id=self.user_id)
                 QMessageBox.information(self, "成功", "模型保存成功！")
                 
                 # 发送模型加载信号
