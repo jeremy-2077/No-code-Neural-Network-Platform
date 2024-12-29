@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
             self.training_page = TrainingPage()
             self.inference_page = InferencePage()
             # 添加AI助手标签页作为辅助功能
-            self.ai_assistant = AIAssistantWidget()
+            self.ai_assistant = AIAssistantWidget(user_id)
 
             # 设置用户ID
             self.data_analysis_page.user_id = user_id

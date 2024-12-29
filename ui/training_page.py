@@ -595,18 +595,18 @@ class TrainingPage(QWidget):
         
         # 损失曲线
         ax1 = self.figure.add_subplot(211)
-        ax1.plot(history["loss"], label="训练损失")
-        ax1.plot(history["val_loss"], label="验证损失")
-        ax1.set_title("损失曲线")
+        ax1.plot(history["loss"], label="Training Loss")
+        ax1.plot(history["val_loss"], label="Validation Loss")
+        ax1.set_title("Loss Curve")
         ax1.set_xlabel("Epoch")
         ax1.set_ylabel("Loss")
         ax1.legend()
         
         # 准确率曲线
         ax2 = self.figure.add_subplot(212)
-        ax2.plot(history["accuracy"], label="训练准确率")
-        ax2.plot(history["val_accuracy"], label="验证准确率")
-        ax2.set_title("准确率曲线")
+        ax2.plot(history["accuracy"], label="Training Accuracy")
+        ax2.plot(history["val_accuracy"], label="Validation Accuracy")
+        ax2.set_title("Accuracy Curve")
         ax2.set_xlabel("Epoch")
         ax2.set_ylabel("Accuracy (%)")
         ax2.legend()

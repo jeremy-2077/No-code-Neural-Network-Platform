@@ -138,13 +138,13 @@ class NNModel(nn.Module):
                     model.add_layer(NNLayer.from_dict(layer_data))
                 
                 # 尝试加载模型参数
-                save_dir = "models/saved"
-                param_path = os.path.join(save_dir, f"{user_id}_{name}.pth")
-                if os.path.exists(param_path):
-                    try:
-                        model.load_state_dict(torch.load(param_path))
-                    except Exception as e:
-                        print(f"加载模型参数失败: {str(e)}")
+                # save_dir = "models/saved"
+                # param_path = os.path.join(save_dir, f"{user_id}_{name}.pth")
+                # if os.path.exists(param_path):
+                #     try:
+                #         model.load_state_dict(torch.load(param_path))
+                #     except Exception as e:
+                #         print(f"加载模型参数失败: {str(e)}")
                 
                 return model
             

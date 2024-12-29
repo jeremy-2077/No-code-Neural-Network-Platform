@@ -8,13 +8,15 @@ import sqlite3
 import os
 
 class NetworkGeneratorWidget(QWidget):
-    def __init__(self, client):
+    def __init__(self, client, user_id):
         super().__init__()
         self.client = client
+        self.user_id = user_id
         self.init_ui()
     
     def init_ui(self):
         layout = QFormLayout()
+        print(self.user_id)
         
         #模型名字
         self.name = QLineEdit()
@@ -24,7 +26,7 @@ class NetworkGeneratorWidget(QWidget):
         # 任务类型选择
         self.task_type = QComboBox()
         self.task_type.addItems(["图像分类", "目标检测", "图像分割", 
-                                "文本分类", "序列预测", "自然语言处理"])
+                                "文本分类", "序列预测", "自然语言处理", "回归", "分类", "聚类"])
         layout.addRow("任务类型:", self.task_type)
         
         # 数据规模设置
@@ -74,32 +76,40 @@ class NetworkGeneratorWidget(QWidget):
             {{
                 "layers": [
                     {{
-                        "type": "卷积层",
+                        "type": "Linear",
                         "params": {{
-                            "kernel_size": [3, 3],
-                            "filters": 32,
-                            "stride": 1,
-                            "padding": "same"
+                            "in_features": 2,
+                            "out_features": 5
                         }}
                     }},
                     {{
-                        "type": "池化层",
+                        "type": "Relu", 
+                        "params": {{}}
+                    }},
+                    {{
+                        "type": "Linear",
                         "params": {{
-                            "pool_size": [2, 2],
-                            "stride": 2,
-                            "pool_type": "max"
+                            "in_features": 5,
+                            "out_features": 1
                         }}
                     }}
-                ],
-                "parameters": {{}}
+                ]
             }}
 
             要求：
             1. 只返回JSON格式数据，不要包含任何其他文字
-            2. 所有层的type必须使用中文：卷积层、池化层、全连接层、批归一化层、激活层等
-            3. params中包含该层所需的所有参数
-            4. 必须包含parameters字段，通常为空对象
-            5. 根据任务类型和复杂度要求生成合适的网络结构
+            2. params中的参数必须使用给定的参数名，不能使用其他参数名
+            3. 根据任务类型和复杂度要求生成合适的网络结构
+            4. 请使用PyTorch框架
+            5. 其中：{{"type": "Linear", "params": {{"in_features": 2, "out_features": 5}}}}表示全连接层，in_features是输入特征数，out_features是输出特征数
+            6. 其中：{{"type": "Conv2d", "params": {{"in_channels": 1, "out_channels": 32, "kernel_size": 3, "stride": 1, "padding": 1}}}}表示卷积层，in_channels是输入通道数，out_channels是输出通道数，kernel_size是卷积核大小，stride是步长，padding是填充方式
+            7. 其中：{{"type": "MaxPool2d", "params": {{"kernel_size": 2, "stride": 2, "padding": 0}}}}表示池化层，kernel_size是池化窗口大小，stride是步长，padding是填充方式
+            8. 其中：{{"type": "AvgPool2d", "params": {{"kernel_size": 2, "stride": 2, "padding": 0}}}}表示池化层，kernel_size是池化窗口大小，stride是步长，padding是填充方式
+            9. 其中：{{"type": "Tanh", "params": {{}}}}表示激活层，激活函数为Tanh
+            10. 其中：{{"type": "Relu", "params": {{}}}}表示激活层，激活函数为ReLU
+            11. 其中：{{"type": "Sigmoid", "params": {{}}}}表示激活层，激活函数为Sigmoid
+            12. 只能使用以上层，不能使用其他层
+            13. 其中参数的值为数字，如：in_features": 2，不能有运算符，如：in_features": 2*3
             """
             
             response = self.client.chat.completions.create(
@@ -110,15 +120,20 @@ class NetworkGeneratorWidget(QWidget):
                 ],
                 stream=False
             )
-            
+            print(response)
+            print("\n\n\n")
             # 获取响应内容并清理
             content = response.choices[0].message.content.strip()
+            print(content)
+            print("\n\n\n")
             # 如果响应包含多余的内容，只保留JSON部分
             if '```json' in content:
                 content = content.split('```json')[1].split('```')[0].strip()
             elif '```' in content:
                 content = content.split('```')[1].strip()
             
+            print(content)
+            print("\n\n\n")
             # 解析JSON并验证
             try:
                 model_spec = json.loads(content)
@@ -136,9 +151,7 @@ class NetworkGeneratorWidget(QWidget):
                 
             # 保存到数据库
             model_id = self.save_to_database(model_spec)
-            
-            # 生成实现文件
-            self.generate_implementation_files(model_id, model_spec)
+
             
             # 显示结果（确保中文正确显示）
             formatted_result = json.dumps(model_spec, indent=2, ensure_ascii=False)
@@ -172,119 +185,6 @@ class NetworkGeneratorWidget(QWidget):
             if not isinstance(layer["params"], dict):
                 raise ValueError("params必须是字典类型")
     
-    def generate_implementation_files(self, model_id, model_spec):
-        """生成模型实现文件"""
-        try:
-            # 创建模型目录
-            model_dir = f"generated_models/model_{model_id}"
-            os.makedirs(model_dir, exist_ok=True)
-            
-            # 生成模型实现文件
-            model_code = self.generate_model_code(model_spec)
-            with open(f"{model_dir}/model.py", "w", encoding="utf-8") as f:
-                f.write(model_code)
-            
-            # 生成配置文件
-            with open(f"{model_dir}/config.json", "w", encoding="utf-8") as f:
-                json.dump(model_spec, f, indent=2, ensure_ascii=False)
-                
-        except Exception as e:
-            raise Exception(f"生成实现文件失败: {str(e)}")
-    
-    def generate_model_code(self, model_spec):
-        """根据模型规范生成PyTorch代码"""
-        code = """import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        
-        # 定义网络层
-"""
-        
-        # 计算特征图大小的辅助变量
-        current_channels = 3  # 默认输入通道数
-        current_size = 224   # 默认输入大小
-        
-        # 添加层定义
-        for i, layer in enumerate(model_spec["layers"]):
-            if layer["type"] == "卷积层":
-                params = layer["params"]
-                in_channels = current_channels
-                out_channels = params['filters']
-                code += f"        self.conv{i} = nn.Conv2d(in_channels={in_channels}, "
-                code += f"out_channels={out_channels}, "
-                code += f"kernel_size={params['kernel_size']}, "
-                code += f"stride={params.get('stride', 1)}, "
-                code += f"padding='{params.get('padding', 'valid')}')\n"
-                current_channels = out_channels
-                
-            elif layer["type"] == "池化层":
-                params = layer["params"]
-                if params.get("pool_type", "max") == "max":
-                    code += f"        self.pool{i} = nn.MaxPool2d("
-                else:
-                    code += f"        self.pool{i} = nn.AvgPool2d("
-                code += f"kernel_size={params['pool_size']}, "
-                code += f"stride={params.get('stride', None)})\n"
-                
-                # 更新特征图大小
-                pool_size = params['pool_size'][0] if isinstance(params['pool_size'], list) else params['pool_size']
-                current_size = current_size // pool_size
-                
-            elif layer["type"] == "全连接层":
-                params = layer["params"]
-                if i == 0 or model_spec["layers"][i-1]["type"] not in ["全连接层", "展平层"]:
-                    # 如果是第一个全连接层，需要先计算输入特征数
-                    in_features = current_channels * current_size * current_size
-                    code += f"        self.flatten{i} = nn.Flatten()\n"
-                else:
-                    in_features = prev_units
-                    
-                units = params['units']
-                code += f"        self.fc{i} = nn.Linear(in_features={in_features}, "
-                code += f"out_features={units})\n"
-                prev_units = units
-                
-            elif layer["type"] == "批归一化层":
-                params = layer["params"]
-                code += f"        self.bn{i} = nn.BatchNorm2d({current_channels})\n"
-                
-            elif layer["type"] == "展平层":
-                code += f"        self.flatten{i} = nn.Flatten()\n"
-                in_features = current_channels * current_size * current_size
-                
-        # 添加前向传播函数
-        code += "\n    def forward(self, x):\n"
-        for i, layer in enumerate(model_spec["layers"]):
-            if layer["type"] == "卷积层":
-                code += f"        x = self.conv{i}(x)\n"
-            elif layer["type"] == "池化层":
-                code += f"        x = self.pool{i}(x)\n"
-            elif layer["type"] == "全连接层":
-                if i == 0 or model_spec["layers"][i-1]["type"] not in ["全连接层", "展平层"]:
-                    code += f"        x = self.flatten{i}(x)\n"
-                code += f"        x = self.fc{i}(x)\n"
-            elif layer["type"] == "批归一化层":
-                code += f"        x = self.bn{i}(x)\n"
-            elif layer["type"] == "展平层":
-                code += f"        x = self.flatten{i}(x)\n"
-            
-            # 添加激活函数
-            if "activation" in layer.get("params", {}):
-                activation = layer["params"]["activation"]
-                if activation == "relu":
-                    code += "        x = F.relu(x)\n"
-                elif activation == "sigmoid":
-                    code += "        x = torch.sigmoid(x)\n"
-                elif activation == "tanh":
-                    code += "        x = torch.tanh(x)\n"
-            
-        code += "        return x\n"
-        return code
-    
     def save_to_database(self, model_spec):
         conn = sqlite3.connect('neural_network.db')
         cursor = conn.cursor()
@@ -299,8 +199,8 @@ class Net(nn.Module):
         
         try:
             # 将模型规范转换为JSON字符串，确保中文正确存储
-            architecture_json = json.dumps({"layers": model_spec["layers"]}, ensure_ascii=False)
-            parameters_json = json.dumps(model_spec.get("parameters", {}), ensure_ascii=False)
+            architecture_json = json.dumps(model_spec)
+            parameters_json = '{}'
             
             # 获取模型名称
             model_name = self.name.text().strip()
@@ -309,13 +209,11 @@ class Net(nn.Module):
             
             # 插入数据
             cursor.execute('''INSERT INTO models
-                             (name, architecture, parameters)
-                             VALUES (?, ?, ?)''',
-                          (model_name, architecture_json, parameters_json))
+                             (user_id, name, architecture, parameters)
+                             VALUES (?, ?, ?, ?)''',
+                          (self.user_id, model_name, architecture_json, parameters_json))
             
-            model_id = cursor.lastrowid
             conn.commit()
-            return model_id
             
         except sqlite3.Error as e:
             QMessageBox.warning(self, "数据库错误", f"保存模型时发生错误: {str(e)}")
@@ -324,14 +222,16 @@ class Net(nn.Module):
             conn.close()
 
 class AIAssistantWidget(QWidget):
-    def __init__(self):
+    def __init__(self, user_id):
         super().__init__()
         self.client = OpenAI(
             api_key="sk-de1daa7af7c74e78b517ef6114d2ce6a",
             base_url="https://api.deepseek.com"
         )
+        self.user_id = user_id  # 添加默认用户ID
         self.init_ui()
-        
+
+
     def init_ui(self):
         layout = QVBoxLayout()
         
@@ -372,7 +272,9 @@ class AIAssistantWidget(QWidget):
         tab_widget.addTab(chat_widget, "AI对话")
         
         # 添加神经网络生成器页面
-        generator_widget = NetworkGeneratorWidget(self.client)
+        print("page")
+        print(self.user_id)
+        generator_widget = NetworkGeneratorWidget(self.client, self.user_id)
         tab_widget.addTab(generator_widget, "模型生成器")
         
         self.setLayout(layout)

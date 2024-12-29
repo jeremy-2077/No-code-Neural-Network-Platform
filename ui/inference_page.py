@@ -262,15 +262,34 @@ class InferencePage(QWidget):
         # 更新结果表格
         if isinstance(predictions, torch.Tensor):
             predictions = predictions.numpy()
-        
+
+        # 获取预测结果的行数
         rows = len(predictions) if isinstance(predictions, np.ndarray) else 1
+
+        # 设置表格的行数
         self.result_table.setRowCount(rows)
-        
+
+        # 获取当前表格的列数
+        current_column_count = self.result_table.columnCount()
+
+        # 如果表格中没有列或列数少于需要的列数，添加列
+        if current_column_count < 2:
+            self.result_table.setColumnCount(2)  # 至少需要两列，一列用于输入，一列用于预测结果
+            self.result_table.setHorizontalHeaderLabels(["输入", "预测结果"])
+        else:
+            # 如果表格中已有两列或更多，确保有足够的列来显示预测结果
+            self.result_table.setColumnCount(current_column_count + 1)
+
+        # 更新最后一列的标题为“预测结果”
+        self.result_table.setHorizontalHeaderLabels(
+            [self.result_table.horizontalHeaderItem(i).text() for i in range(current_column_count)] + ["预测结果"])
+
         for i in range(rows):
-            pred = predictions[i] if isinstance(predictions, np.ndarray) else predictions
+            pred = predictions[i]
             item = QTableWidgetItem(str(pred))
-            self.result_table.setItem(i, 1, item)
-        
+            # 将预测结果放入最后一列
+            self.result_table.setItem(i, current_column_count, item)
+
         # 更新可视化
         self.update_visualization(predictions)
     
@@ -284,17 +303,21 @@ class InferencePage(QWidget):
             # 绘制分类结果的条形图
             if isinstance(predictions, np.ndarray):
                 unique_classes, counts = np.unique(predictions, return_counts=True)
-                ax.bar(unique_classes, counts)
-                ax.set_title("分类结果分布")
-                ax.set_xlabel("类别")
-                ax.set_ylabel("数量")
+                # 确保条形图的x轴标签是类别的值
+                ax.bar(range(len(unique_classes)), counts, tick_label=unique_classes)
+                ax.set_title("Classification Result Distribution")
+                ax.set_xlabel("Class")
+                ax.set_ylabel("Quantity")
+                # 设置x轴的刻度标签，以显示每个类别
+                ax.set_xticks(range(len(unique_classes)))
+                ax.set_xticklabels(unique_classes)
         else:
             # 绘制回归结果的散点图
             if isinstance(predictions, np.ndarray):
                 ax.scatter(range(len(predictions)), predictions)
-                ax.set_title("回归预测结果")
-                ax.set_xlabel("样本索引")
-                ax.set_ylabel("预测值")
+                ax.set_title("Regression Prediction Results")
+                ax.set_xlabel("Sample Index")
+                ax.set_ylabel("Predicted Value")
         
         self.figure.tight_layout()
         self.canvas.draw() 
