@@ -17,7 +17,7 @@ from datetime import datetime
 class TrainingThread(QThread):
     """训练线程"""
     progress_updated = pyqtSignal(int, dict)  # 进度信号
-    training_finished = pyqtSignal(dict)  # 完成信号
+    training_finished = pyqtSignal(dict, nn.Module)  # 完成信号
     error_occurred = pyqtSignal(str)  # 错误信号
     
     def __init__(self, model, train_params, data):
@@ -57,9 +57,10 @@ class TrainingThread(QThread):
                 # 训练一个epoch
                 for i, (inputs, targets) in enumerate(self.data["train_loader"]):
                     inputs, targets = inputs.to(device), targets.to(device)
-                    
+                    if self.train_params["loss_function"] == "CrossEntropyLoss":
+                        targets = targets.to(torch.long)
                     optimizer.zero_grad()
-                    outputs = self.model(inputs)
+                    outputs = self.model(inputs).to(torch.float32)
                     loss = criterion(outputs, targets)
                     loss.backward()
                     optimizer.step()
@@ -78,7 +79,9 @@ class TrainingThread(QThread):
                 with torch.no_grad():
                     for inputs, targets in self.data["val_loader"]:
                         inputs, targets = inputs.to(device), targets.to(device)
-                        outputs = self.model(inputs)
+                        if self.train_params["loss_function"] == "CrossEntropyLoss":
+                            targets = targets.to(torch.long)
+                        outputs = self.model(inputs).to(torch.float32)
                         loss = criterion(outputs, targets)
                         
                         val_loss += loss.item()
@@ -96,7 +99,7 @@ class TrainingThread(QThread):
                 progress = int((epoch + 1) / epochs * 100)
                 self.progress_updated.emit(progress, history)
             
-            self.training_finished.emit(history)
+            self.training_finished.emit(history, self.model)
             
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -492,11 +495,11 @@ class TrainingPage(QWidget):
             from torch.utils.data import TensorDataset, DataLoader
             train_dataset = TensorDataset(
                 torch.FloatTensor(X_train),
-                torch.LongTensor(y_train)
+                torch.FloatTensor(y_train)
             )
             val_dataset = TensorDataset(
                 torch.FloatTensor(X_val),
-                torch.LongTensor(y_val)
+                torch.FloatTensor(y_val)
             )
             
             self.data = {
@@ -571,11 +574,11 @@ class TrainingPage(QWidget):
         self.progress_bar.setValue(progress)
         self.update_plots(history)
     
-    def training_finished(self, history: dict):
+    def training_finished(self, history: dict, model: nn.Module):
         """训练完成处理"""
         self.update_ui_state(False)
         QMessageBox.information(self, "完成", "训练已完成！")
-    
+        self.model = model
     def handle_error(self, error_msg: str):
         """处理训练错误"""
         self.update_ui_state(False)
@@ -618,13 +621,13 @@ class TrainingPage(QWidget):
             return
         
         try:
-            # 选择保存���径
+            # 选择保存路径
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "保存模型", "", "模型文件 (*.pt);;所有文件 (*)"
+                self, "保存模型", "", "模型文件 (*.pt *.pth);;所有文件 (*)"
             )
             if file_path:
                 # 保存模型
-                torch.save(self.model.state_dict(), file_path)
+                torch.save(self.model, file_path)
                 QMessageBox.information(self, "成功", "模型保存成功！")
         
         except Exception as e:

@@ -130,10 +130,10 @@ class InferencePage(QWidget):
         """加载模型"""
         try:
             model_name, ok = QFileDialog.getOpenFileName(
-                self, "选择模型文件", "", "Model Files (*.pth)"
+                self, "选择模型文件", "", "Model Files (*.pth *.pt)"
             )
             if ok:
-                self.model = NNModel.load(model_name)
+                self.model = torch.load(model_name)
                 self.model.eval()  # 设置为评估模式
                 self.model_info_label.setText(f"已加载模型: {model_name}")
                 self.predict_btn.setEnabled(True)
