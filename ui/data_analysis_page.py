@@ -66,9 +66,9 @@ class DataAnalysisPage(QWidget):
         self.plot_btn = QPushButton("生成图表")
         self.plot_btn.clicked.connect(self.plot_data)
         
-        viz_layout.addRow("图表类型:", self.plot_type_combo)
-        viz_layout.addRow("X轴:", self.x_axis_combo)
-        viz_layout.addRow("Y轴:", self.y_axis_combo)
+        viz_layout.addRow("Graph:", self.plot_type_combo)
+        viz_layout.addRow("X:", self.x_axis_combo)
+        viz_layout.addRow("Y:", self.y_axis_combo)
         viz_layout.addRow(self.plot_btn)
         
         viz_group.setLayout(viz_layout)

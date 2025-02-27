@@ -66,7 +66,7 @@ class LoginPage(QWidget):
         password = self.password_input.text().strip()
         
         if not username or not password:
-            QMessageBox.warning(self, "警告", "用户名和密码��能为空！")
+            QMessageBox.warning(self, "警告", "用户名和密码不能为空！")
             return
         
         if self.db.add_user(username, password):
