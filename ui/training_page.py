@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QLabel, QGroupBox, QFormLayout, QSpinBox, QComboBox,
                             QProgressBar, QCheckBox, QDoubleSpinBox, QMessageBox,
                             QFileDialog, QDialog, QListWidget, QListWidgetItem,
-                            QScrollArea, QButtonGroup, QRadioButton)
+                            QScrollArea, QButtonGroup, QRadioButton, QLineEdit)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -190,13 +190,23 @@ class TrainingPage(QWidget):
         self.df = None
         self.feature_checkboxes = {}  # 存储特征复选框
         self.label_radios = {}  # 存储标签单选按钮
+        self.user_id = None  # 初始化用户ID
         self.setup_ui()
     
     def setup_ui(self):
         layout = QHBoxLayout()
         
-        # 左侧训练参数面板
-        left_panel = QVBoxLayout()
+        # 创建左侧滚动区域
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setMinimumWidth(350)
+        left_scroll.setMaximumWidth(500)
+        
+        # 左侧训练参数面板容器
+        left_container = QWidget()
+        left_panel = QVBoxLayout(left_container)
         
         # 模型加载组
         model_group = QGroupBox("模型加载")
@@ -231,6 +241,7 @@ class TrainingPage(QWidget):
         # 创建滚动区域用于特征选择
         feature_scroll = QScrollArea()
         feature_scroll.setWidgetResizable(True)
+        feature_scroll.setMaximumHeight(120)  # 限制特征选择区域高度
         feature_widget = QWidget()
         # 将布局保存为实例变量
         self.feature_checkbox_layout = QVBoxLayout()
@@ -238,6 +249,7 @@ class TrainingPage(QWidget):
         # 标签选择区域
         label_scroll = QScrollArea()
         label_scroll.setWidgetResizable(True)
+        label_scroll.setMaximumHeight(120)  # 限制标签选择区域高度
         label_widget = QWidget()
         # 将布局保存为实例变量
         self.label_radio_layout = QVBoxLayout()
@@ -343,35 +355,78 @@ class TrainingPage(QWidget):
         left_panel.addWidget(control_group)
         left_panel.addStretch()
         
+        # 设置左侧容器的尺寸策略
+        left_container.setLayout(left_panel)
+        left_scroll.setWidget(left_container)
+        
         # 右侧训练可视化面板
         right_panel = QVBoxLayout()
         
         # 训练曲线图
-        self.figure = plt.figure(figsize=(8, 6))
+        self.figure = plt.figure(figsize=(6, 4))  # 稍微减小图表尺寸
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumSize(400, 300)  # 设置最小尺寸
         
         right_panel.addWidget(QLabel("训练过程可视化"))
         right_panel.addWidget(self.canvas)
         
         # 添加到主布局
-        layout.addLayout(left_panel, 1)
-        layout.addLayout(right_panel, 2)
+        layout.addWidget(left_scroll)  # 添加滚动区域而不是布局
+        layout.addLayout(right_panel, 2)  # 右侧占更多空间
         
         self.setLayout(layout)
     
     def load_model(self):
         """加载已保存的模型"""
         try:
+            # 改进的用户ID检查逻辑
             if self.user_id is None:
-                QMessageBox.warning(self, "警告", "请先登录！")
-                return
+                # 尝试从UserService获取当前用户ID
+                try:
+                    from services.user_service import UserService
+                    user_service = UserService()
+                    if user_service.is_logged_in():
+                        self.user_id = user_service.get_current_user_id()
+                        QMessageBox.information(self, "提示", f"已自动获取用户ID: {self.user_id}")
+                    else:
+                        QMessageBox.warning(self, "警告", "请先登录！\n\n调试信息: user_id为None且UserService显示未登录")
+                        return
+                except Exception as e:
+                    QMessageBox.critical(self, "错误", f"无法获取用户信息: {str(e)}\n\n请重新登录应用程序")
+                    return
             
             # 获取当前用户的所有模型
             model = NNModel()
             models = model.get_user_models(self.user_id)
             
+            # 改进的空模型检查
             if not models:
-                QMessageBox.warning(self, "提示", "您还没有保存过任何模型！")
+                # 提供更详细的诊断信息
+                from database.db_manager import DatabaseManager
+                db = DatabaseManager()
+                with db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    # 检查数据库中总模型数
+                    cursor.execute("SELECT COUNT(*) FROM models")
+                    total_models = cursor.fetchone()[0]
+                    
+                    # 检查当前用户的模型数
+                    cursor.execute("SELECT COUNT(*) FROM models WHERE user_id = ?", (self.user_id,))
+                    user_models_count = cursor.fetchone()[0]
+                
+                message = f"您还没有保存过任何模型！\n\n"
+                message += f"调试信息:\n"
+                message += f"- 当前用户ID: {self.user_id}\n"
+                message += f"- 您的模型数: {user_models_count}\n"
+                message += f"- 数据库总模型数: {total_models}\n\n"
+                
+                if total_models > 0 and user_models_count == 0:
+                    message += "建议: 数据库中有其他用户的模型，但您的账户下没有模型。\n"
+                    message += "请先在'模型搭建'页面创建并保存模型。"
+                elif total_models == 0:
+                    message += "建议: 数据库中暂无任何模型，请先在'模型搭建'页面创建并保存模型。"
+                
+                QMessageBox.information(self, "提示", message)
                 return
             
             # 显示模型选择对话框
@@ -390,7 +445,7 @@ class TrainingPage(QWidget):
                     QMessageBox.warning(self, "警告", "请选择一个模型！")
                     
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载模型失败: {str(e)}")
+            QMessageBox.critical(self, "错误", f"加载模型失败: {str(e)}\n\n完整错误信息:\n{str(e)}")
     
     def set_model(self, model):
         """设置要训练的模型"""
@@ -615,20 +670,73 @@ class TrainingPage(QWidget):
         self.canvas.draw() 
     
     def save_model(self):
-        """保存当前加载的模型"""
+        """保存当前训练的模型到数据库"""
         if self.model is None:
             QMessageBox.warning(self, "警告", "没有加载模型，无法保存！")
             return
+            
+        if self.user_id is None:
+            QMessageBox.warning(self, "警告", "请先登录！")
+            return
         
         try:
-            # 选择保存路径
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "保存模型", "", "模型文件 (*.pt *.pth);;所有文件 (*)"
+            # 弹出输入对话框，获取用户输入的模型名称
+            from PyQt5.QtWidgets import QInputDialog
+            model_name, ok = QInputDialog.getText(
+                self, "保存模型", "请输入模型名称:", QLineEdit.Normal, "trained_model"
             )
-            if file_path:
-                # 保存模型
-                torch.save(self.model, file_path)
-                QMessageBox.information(self, "成功", "模型保存成功！")
+            
+            if ok and model_name:
+                # 检查模型类型并保存
+                if hasattr(self.model, 'save') and hasattr(self.model, 'layers'):
+                    # 这是我们的NNModel，直接保存
+                    self.model.save(name=model_name, user_id=self.user_id)
+                    QMessageBox.information(self, "成功", f"模型 '{model_name}' 保存成功！")
+                    
+                elif hasattr(self.model, 'state_dict'):
+                    # 这是一个PyTorch模型，我们需要创建一个简单的包装来保存
+                    from models.neural_network import NNModel, NNLayer
+                    
+                    # 创建一个新的NNModel实例
+                    save_model = NNModel()
+                    
+                    # 添加一个简单的线性层作为占位符（用于数据库记录）
+                    placeholder_layer = NNLayer("Linear", {
+                        "in_features": 1,
+                        "out_features": 1
+                    })
+                    save_model.add_layer(placeholder_layer)
+                    
+                    # 保存到数据库（带描述性的名称表示这是训练后的模型）
+                    display_name = f"{model_name}_训练完成"
+                    save_model.save(name=display_name, user_id=self.user_id)
+                    
+                    # 单独保存训练后的权重
+                    import os
+                    os.makedirs("saved_models", exist_ok=True)
+                    weights_path = f"saved_models/{self.user_id}_{model_name}_trained.pth"
+                    torch.save(self.model.state_dict(), weights_path)
+                    
+                    QMessageBox.information(self, "成功", 
+                                          f"训练模型 '{model_name}' 保存成功！\n"
+                                          f"数据库记录: {display_name}\n"
+                                          f"权重文件: {weights_path}")
+                
+                else:
+                    # 未知模型类型，尝试直接保存
+                    import os
+                    os.makedirs("saved_models", exist_ok=True)
+                    model_path = f"saved_models/{self.user_id}_{model_name}_raw.pth"
+                    torch.save(self.model, model_path)
+                    QMessageBox.information(self, "成功", 
+                                          f"模型已保存到文件: {model_path}\n"
+                                          f"注意：此模型未保存到数据库中")
+                    
+            elif not ok:
+                # 用户取消了保存
+                pass
+            else:
+                QMessageBox.warning(self, "警告", "请输入有效的模型名称！")
         
         except Exception as e:
             QMessageBox.critical(self, "错误", f"保存模型失败: {str(e)}") 

@@ -1,0 +1,68 @@
+# Python 相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE 相关
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 模型文件 (太大不适合版本控制)
+saved_models/*.pt
+saved_models/*.pth
+
+# 数据文件 (可能包含敏感信息)
+data/*.csv
+data/*.xlsx
+data/*.json
+
+# 临时文件
+temp/
+logs/
+*.log
+
+# PyTorch 相关
+*.pkl
+*.pickle
+
+# 配置文件 (可能包含密钥)
+config.ini
+.env
+
+# 测试覆盖率
+.coverage
+htmlcov/
+
+# 分发/打包
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg 

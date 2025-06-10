@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                             QComboBox, QFileDialog, QTableWidget, QTableWidgetItem,
-                            QLabel, QGroupBox, QFormLayout, QMessageBox)
+                            QLabel, QGroupBox, QFormLayout, QMessageBox, QScrollArea)
 from PyQt5.QtCore import Qt
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -19,8 +19,15 @@ class DataAnalysisPage(QWidget):
     def setup_ui(self):
         layout = QHBoxLayout()
         
-        # 左侧面板：数据导入和预处理
-        left_panel = QVBoxLayout()
+        # 创建左侧滚动区域
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setMinimumWidth(300)
+        left_scroll.setMaximumWidth(400)
+        
+        # 左侧面板容器：数据导入和预处理
+        left_container = QWidget()
+        left_panel = QVBoxLayout(left_container)
         
         # 数据导入部分
         import_group = QGroupBox("数据导入")
@@ -78,15 +85,20 @@ class DataAnalysisPage(QWidget):
         left_panel.addWidget(viz_group)
         left_panel.addStretch()
         
+        # 设置左侧容器到滚动区域
+        left_scroll.setWidget(left_container)
+        
         # 右侧面板：数据预览和可视化结果
         right_panel = QVBoxLayout()
         
         # 数据预览表格
         self.data_table = QTableWidget()
+        self.data_table.setMaximumHeight(250)  # 限制表格高度
         
         # 可视化结果显示区域
-        self.figure = plt.figure(figsize=(6, 4))
+        self.figure = plt.figure(figsize=(5, 3))  # 减小图表尺寸
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumSize(300, 200)  # 设置最小尺寸
         
         right_panel.addWidget(QLabel("数据预览"))
         right_panel.addWidget(self.data_table)
@@ -94,8 +106,8 @@ class DataAnalysisPage(QWidget):
         right_panel.addWidget(self.canvas)
         
         # 添加左右面板到布局
-        layout.addLayout(left_panel, 1)
-        layout.addLayout(right_panel, 2)
+        layout.addWidget(left_scroll)  # 添加滚动区域
+        layout.addLayout(right_panel, 2)  # 右侧占更多空间
         
         self.setLayout(layout)
     
