@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                             QLabel, QGraphicsScene, QGraphicsView, QMessageBox,
                             QGroupBox, QFormLayout, QSpinBox, QComboBox, QLineEdit,
-                            QGraphicsItem, QInputDialog, QGraphicsRectItem)
+                            QGraphicsItem, QInputDialog, QGraphicsRectItem, QScrollArea)
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt5.QtGui import (QPainter, QPen, QBrush, QColor, QFont, QLinearGradient, 
                         QPolygonF)
@@ -99,20 +99,28 @@ class ModelBuilderPage(QWidget):
         # 中央画布
         self.scene = QGraphicsScene()
         self.view = ModelBuilderView(self.scene, self)
-        self.view.setMinimumSize(600, 400)
+        self.view.setMinimumSize(400, 300)  # 减小最小尺寸
         
-        # 右侧参数面板
-        params_panel = QVBoxLayout()
+        # 右侧参数面板 - 添加滚动支持
+        params_scroll = QScrollArea()
+        params_scroll.setWidgetResizable(True)
+        params_scroll.setMaximumWidth(300)
+        params_scroll.setMinimumWidth(250)
+        
+        params_container = QWidget()
+        params_panel = QVBoxLayout(params_container)
         params_group = QGroupBox("层参数")
         self.params_layout = QFormLayout()
         params_group.setLayout(self.params_layout)
         params_panel.addWidget(params_group)
         params_panel.addStretch()
         
+        params_scroll.setWidget(params_container)
+        
         # 添加到主布局
-        layout.addLayout(tools_panel, 1)
-        layout.addWidget(self.view, 2)
-        layout.addLayout(params_panel, 1)
+        layout.addLayout(tools_panel, 0)  # 固定宽度
+        layout.addWidget(self.view, 3)    # 主要空间给画布
+        layout.addWidget(params_scroll, 0)  # 固定宽度
         
         self.setLayout(layout)
     

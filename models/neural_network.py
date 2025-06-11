@@ -79,11 +79,11 @@ class NNModel(nn.Module):
             existing = cursor.fetchone()
             
             if existing:
-                # 更新现有模型
+                # 更新现有模型，同时更新创建时间使其出现在列表顶部
                 cursor.execute(
                     """
                     UPDATE models 
-                    SET architecture=?, parameters=?, updated_at=datetime('now', 'localtime')
+                    SET architecture=?, parameters=?, created_at=datetime('now', 'localtime')
                     WHERE user_id=? AND name=?
                     """,
                     (model_data, "{}", user_id, name)
@@ -97,9 +97,12 @@ class NNModel(nn.Module):
                     """,
                     (user_id, name, model_data, "{}")
                 )
+            
+            # 重要：提交事务
+            conn.commit()
         
         # 确保保存目录存在
-        save_dir = "models/saved"
+        save_dir = "saved_models"
         os.makedirs(save_dir, exist_ok=True)
         
         # 保存PyTorch模型参数
@@ -111,22 +114,23 @@ class NNModel(nn.Module):
     
     @classmethod
     def load(cls, model_id: int = None, user_id: int = None) -> 'NNModel':
-        """从数据库加载模型，必须指定用户ID，只能加载用户自己的模型"""
+        """从数据库加载模型，可选择验证用户ID"""
             
         model = cls()
         model.user_id = user_id
         
         with model.db.get_connection() as conn:
             cursor = conn.cursor()
-            # 只加载属于该用户的模型
-            cursor.execute(
-                """
-                SELECT id, name, architecture 
-                FROM models 
-                WHERE id=? AND user_id=?
-                """,
-                (model_id, user_id)
-            )
+            
+            query = "SELECT id, name, architecture FROM models WHERE id=?"
+            params = (model_id,)
+            
+            # 如果提供了user_id，则增加用户验证
+            if user_id is not None:
+                query += " AND user_id=?"
+                params += (user_id,)
+                
+            cursor.execute(query, params)
             model_data = cursor.fetchone()
             
             if model_data:
@@ -137,32 +141,23 @@ class NNModel(nn.Module):
                 for layer_data in data["layers"]:
                     model.add_layer(NNLayer.from_dict(layer_data))
                 
-                # 尝试加载模型参数
-                # save_dir = "models/saved"
-                # param_path = os.path.join(save_dir, f"{user_id}_{name}.pth")
-                # if os.path.exists(param_path):
-                #     try:
-                #         model.load_state_dict(torch.load(param_path))
-                #     except Exception as e:
-                #         print(f"加载模型参数失败: {str(e)}")
-                
                 return model
             
             raise Exception("找不到指定的模型或无权访问")
     
-    def get_user_models(self, user_id: int) -> List[Dict]:
-        """获取用户的所有模型"""
+    def get_user_models(self, user_id: int = None) -> List[Dict]:
+        """获取模型列表，如果提供了user_id，则只获取该用户的模型"""
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT id, name, created_at
-                FROM models
-                WHERE user_id=?
-                ORDER BY created_at DESC
-                """,
-                (user_id,)
-            )
+            
+            if user_id is not None:
+                query = "SELECT id, name, created_at FROM models WHERE user_id=? ORDER BY created_at DESC"
+                params = (user_id,)
+            else:
+                query = "SELECT id, name, created_at FROM models ORDER BY created_at DESC"
+                params = ()
+            
+            cursor.execute(query, params)
             return [
                 {
                     "id": row[0],

@@ -1,0 +1,31 @@
+{
+  "database": {
+    "path": "neural_network.db",
+    "pool_size": 5,
+    "timeout": 30.0,
+    "enable_wal": true,
+    "enable_foreign_keys": true
+  },
+  "ui": {
+    "theme": "dark",
+    "window_width": 1323,
+    "window_height": 821,
+    "window_x": 73,
+    "window_y": 66,
+    "remember_window_position": true,
+    "auto_save_interval": 30
+  },
+  "logging": {
+    "level": "INFO",
+    "max_file_size": 10,
+    "backup_count": 5,
+    "enable_console": true,
+    "enable_file": true
+  },
+  "model": {
+    "default_save_format": "pth",
+    "auto_backup": true,
+    "max_backup_count": 10,
+    "compression_enabled": false
+  }
+}

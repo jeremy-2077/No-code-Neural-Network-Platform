@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                             QLabel, QGroupBox, QFormLayout, QLineEdit, QMessageBox,
-                            QFileDialog, QTableWidget, QTableWidgetItem, QComboBox)
+                            QFileDialog, QTableWidget, QTableWidgetItem, QComboBox, QScrollArea, QDialog)
 from PyQt5.QtCore import Qt
 import torch
 import pandas as pd
@@ -8,6 +8,7 @@ import numpy as np
 from models.neural_network import NNModel
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from ui.training_page import ModelSelectDialog
 
 class InferencePage(QWidget):
     def __init__(self):
@@ -19,8 +20,15 @@ class InferencePage(QWidget):
     def setup_ui(self):
         layout = QHBoxLayout()
         
-        # 左侧面板：模型加载和数据输入
-        left_panel = QVBoxLayout()
+        # 创建左侧滚动区域
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setMinimumWidth(300)
+        left_scroll.setMaximumWidth(450)
+        
+        # 左侧面板容器：模型加载和数据输入
+        left_container = QWidget()
+        left_panel = QVBoxLayout(left_container)
         
         # 模型加载组
         model_group = QGroupBox("模型加载")
@@ -93,6 +101,9 @@ class InferencePage(QWidget):
         left_panel.addWidget(predict_group)
         left_panel.addStretch()
         
+        # 设置左侧容器到滚动区域
+        left_scroll.setWidget(left_container)
+        
         # 右侧面板：预测结果显示
         right_panel = QVBoxLayout()
         
@@ -103,6 +114,7 @@ class InferencePage(QWidget):
         self.result_table = QTableWidget()
         self.result_table.setColumnCount(2)
         self.result_table.setHorizontalHeaderLabels(["输入", "预测结果"])
+        self.result_table.setMaximumHeight(200)  # 限制表格高度
         
         result_layout.addWidget(self.result_table)
         result_group.setLayout(result_layout)
@@ -111,8 +123,9 @@ class InferencePage(QWidget):
         viz_group = QGroupBox("结果可视化")
         viz_layout = QVBoxLayout()
         
-        self.figure = plt.figure(figsize=(6, 4))
+        self.figure = plt.figure(figsize=(5, 3))  # 减小图表尺寸
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumSize(300, 200)  # 设置最小尺寸
         
         viz_layout.addWidget(self.canvas)
         viz_group.setLayout(viz_layout)
@@ -121,23 +134,49 @@ class InferencePage(QWidget):
         right_panel.addWidget(viz_group)
         
         # 添加到主布局
-        layout.addLayout(left_panel, 1)
-        layout.addLayout(right_panel, 2)
+        layout.addWidget(left_scroll)  # 添加滚动区域
+        layout.addLayout(right_panel, 2)  # 右侧占更多空间
         
         self.setLayout(layout)
     
     def load_model(self):
-        """加载模型"""
+        """加载模型，采用先加载结构再加载权重的方式"""
         try:
-            model_name, ok = QFileDialog.getOpenFileName(
-                self, "选择模型文件", "", "Model Files (*.pth *.pt)"
-            )
-            if ok:
-                self.model = torch.load(model_name)
-                self.model.eval()  # 设置为评估模式
-                self.model_info_label.setText(f"已加载模型: {model_name}")
-                self.predict_btn.setEnabled(True)
-                QMessageBox.information(self, "成功", "模型加载成功！")
+            # 步骤1：让用户选择数据库中的模型结构
+            # 这里我们假设用户可以访问所有模型进行推理，所以不传入user_id
+            # TODO: 将来可以根据需求限制为当前用户的模型
+            db_models = NNModel().get_user_models(user_id=None) # 获取所有模型
+            
+            if not db_models:
+                QMessageBox.warning(self, "提示", "数据库中没有任何模型结构。请先在“模型搭建”页面创建并保存一个模型。")
+                return
+
+            dialog = ModelSelectDialog(db_models, self)
+            if dialog.exec_() == QDialog.Accepted:
+                model_id = dialog.get_selected_model_id()
+                if not model_id:
+                    return
+
+                # 加载模型结构
+                self.model = NNModel.load(model_id=model_id)
+                QMessageBox.information(self, "成功", f"模型结构 '{self.model.layers[0].type}' 加载成功！\n请现在选择该结构的权重文件。")
+
+                # 步骤2：让用户选择与该结构匹配的权重文件
+                model_path, ok = QFileDialog.getOpenFileName(
+                    self, "选择模型权重文件", "saved_models/", "Model Files (*.pth *.pt)"
+                )
+                if ok and model_path:
+                    # 加载权重
+                    state_dict = torch.load(model_path)
+                    self.model.load_state_dict(state_dict)
+                    
+                    # 设置为评估模式
+                    self.model.eval()
+                    
+                    self.model_info_label.setText(f"已加载模型: ID {model_id}\n权重: {model_path.split('/')[-1]}")
+                    self.predict_btn.setEnabled(True)
+                    QMessageBox.information(self, "成功", "模型权重加载成功，可以开始预测！")
+        
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载模型失败: {str(e)}")
 
@@ -280,7 +319,7 @@ class InferencePage(QWidget):
             # 如果表格中已有两列或更多，确保有足够的列来显示预测结果
             self.result_table.setColumnCount(current_column_count + 1)
 
-        # 更新最后一列的标题为“预测结果”
+        # 更新最后一列的标题为"预测结果"
         self.result_table.setHorizontalHeaderLabels(
             [self.result_table.horizontalHeaderItem(i).text() for i in range(current_column_count)] + ["预测结果"])
 

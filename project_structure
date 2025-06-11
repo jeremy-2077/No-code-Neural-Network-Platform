@@ -1,16 +1,44 @@
-neural_network_platform/
-├── main.py
-├── database/
-│   └── db_manager.py
-├── models/
-│   ├── neural_network.py
-│   └── data_processor.py
-├── ui/
-│   ├── main_window.py
-│   ├── data_analysis_page.py
-│   ├── model_builder_page.py
-│   ├── training_page.py
-│   └── inference_page.py
-└── utils/
-    ├── visualizer.py
-    └── model_parser.py 
+No-code-Neural-Network-Platform/
+├── main.py                    # 程序入口（已重构）
+├── requirements.txt           # 依赖管理
+├── README.md                  # 项目文档
+├── .gitignore                 # Git忽略文件
+├── REFACTORING_SUMMARY.md     # 重构总结文档
+├── test_refactored.py         # 重构验证测试
+├── database/                  # 数据库相关
+│   ├── __init__.py
+│   ├── db_manager.py         # 数据库管理器（已优化）
+│   └── connection_pool.py    # 数据库连接池（新增）
+├── models/                    # 模型相关
+│   ├── __init__.py
+│   ├── neural_network.py     # 神经网络模型
+│   └── data_processor.py     # 数据处理器
+├── services/                  # 业务服务层（新增）
+│   ├── __init__.py
+│   └── user_service.py       # 用户管理服务
+├── ui/                        # 用户界面
+│   ├── __init__.py
+│   ├── main_window.py        # 原始主窗口
+│   ├── main_window_refactored.py  # 重构后的主窗口（新增）
+│   ├── login_page.py         # 登录页面（已优化）
+│   ├── data_analysis_page.py # 数据分析页面
+│   ├── model_builder_page.py # 模型搭建页面
+│   ├── training_page.py      # 训练页面
+│   ├── inference_page.py     # 推理页面
+│   ├── ai_assistance.py      # AI助手
+│   └── components/           # UI组件包（新增）
+│       ├── __init__.py
+│       └── model_dialog.py   # 模型对话框组件
+├── utils/                     # 工具类
+│   ├── __init__.py
+│   ├── visualizer.py         # 可视化工具
+│   └── logger.py             # 日志系统（新增）
+├── data/                      # 数据文件目录
+│   ├── README.md
+│   └── *.csv, *.xlsx         # 数据集文件
+├── saved_models/              # 保存的模型目录
+│   ├── README.md
+│   └── *.pt, *.pth           # 模型文件
+├── logs/                      # 日志目录（新增）
+│   └── app_*.log             # 按日期的日志文件
+└── temp/                      # 临时文件目录 
