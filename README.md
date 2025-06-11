@@ -110,7 +110,7 @@ No-code-Neural-Network-Platform/
 如果您遇到任何问题，请通过以下方式联系：
 
 - 提交 [Issue](../../issues)
-- 发送邮件至 [your-email@example.com]
+- 发送邮件至 [10086jeremy@gmail.com]
 
 ## 🔧 开发计划
 
